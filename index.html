@@ -225,15 +225,22 @@
   [contenteditable="true"]{border-radius:6px;transition:outline .12s,background .12s}
   [contenteditable="true"]:hover{outline:2px dashed #2a7fd4;outline-offset:3px;cursor:text}
   [contenteditable="true"]:focus{outline:2px solid #0b4f9e;outline-offset:3px;background:#eaf2fb}
+  .ed-imgwrap{position:relative;display:inline-block;width:100%}
+  .ed-imgbtn{position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:30;
+    background:#0b4f9e;color:#fff;border:none;border-radius:10px;padding:9px 16px;font-weight:800;
+    font-size:.9rem;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.3);white-space:nowrap;
+    font-family:'Manrope',system-ui,sans-serif;opacity:0;transition:opacity .15s}
+  .ed-imgwrap:hover .ed-imgbtn{opacity:1}
+  .ed-imgbtn:hover{background:#2a7fd4}
   #editor-bar{position:fixed;left:0;right:0;bottom:0;z-index:99999;background:#16263b;color:#fff;
     display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 22px;
     box-shadow:0 -8px 30px rgba(0,0,0,.28);font-family:'Manrope',system-ui,-apple-system,sans-serif}
   #editor-bar .info{font-size:.92rem;color:#cdd8e4;line-height:1.4}
   #editor-bar .info b{color:#fff}
   #editor-bar .info .saved{color:#7ee0c0;font-weight:700;margin-left:6px;display:none}
-  #editor-bar button{background:#0b4f9e;color:#fff;border:none;border-radius:11px;padding:13px 24px;
+  #editor-bar button.dl{background:#0b4f9e;color:#fff;border:none;border-radius:11px;padding:13px 24px;
     font-weight:800;font-size:.98rem;cursor:pointer;white-space:nowrap;transition:.18s}
-  #editor-bar button:hover{background:#2a7fd4;transform:translateY(-1px)}
+  #editor-bar button.dl:hover{background:#2a7fd4;transform:translateY(-1px)}
   @media(max-width:640px){#editor-bar{flex-direction:column;gap:9px;padding:11px 14px;text-align:center}#editor-bar .info{font-size:.82rem}}
 </style>
 </head>
@@ -550,12 +557,14 @@
 
 
 
+<input type="file" id="ed-fileinput" accept="image/*" style="display:none">
 <div id="editor-bar">
-  <div class="info">✏️ <b>Režim úprav</b> — klikni do libovolného textu a přepiš ho. Obrázky a vzhled měnit nejdou.<span class="saved" id="savedMsg">✓ Staženo</span></div>
-  <button onclick="stahnoutWeb()">💾 Stáhnout upravený web</button>
+  <div class="info">✏️ <b>Režim úprav</b> — klikni do textu a přepiš ho. U fotek najeď myší a klikni <b>„Změnit fotku"</b>.<span class="saved" id="savedMsg">✓ Staženo</span></div>
+  <button class="dl" onclick="stahnoutWeb()">💾 Stáhnout upravený web</button>
 </div>
 <script id="editor-script">
 (function(){
+  // --- TEXT editor ---
   var sels=[".hero h1",".hero p",".eyebrow",".badge-red",".sec-head h2",".sec-head .lead",
     ".stat .n",".stat .t","#komu .ben-grid p",".org-meta",".ben-card h3",".svc li > div",
     ".step h3",".step p",".gal-group h3","figcaption",".car h2",".car p",".car li",
@@ -570,10 +579,48 @@
       document.execCommand("insertText",false,t);
     }
   });
+  // --- PHOTO editor ---
+  var current=null;
+  var fi=document.getElementById("ed-fileinput");
+  // editovatelne fotky: hero + galerie (NE nahledy aut, NE ikony)
+  var imgs=document.querySelectorAll(".hero-media img, .gal-grid img");
+  imgs.forEach(function(img){
+    var wrap=document.createElement("span");
+    wrap.className="ed-imgwrap";
+    img.parentNode.insertBefore(wrap,img);
+    wrap.appendChild(img);
+    var b=document.createElement("button");
+    b.className="ed-imgbtn";b.type="button";b.textContent="📷 Změnit fotku";
+    b.onclick=function(ev){ev.preventDefault();current=img;fi.click();};
+    wrap.appendChild(b);
+  });
+  fi.addEventListener("change",function(){
+    var f=fi.files&&fi.files[0];if(!f||!current)return;
+    var rd=new FileReader();
+    rd.onload=function(e){
+      var im=new Image();
+      im.onload=function(){
+        var MAX=1400;var w=im.width,h=im.height;
+        if(w>MAX||h>MAX){if(w>=h){h=Math.round(h*MAX/w);w=MAX;}else{w=Math.round(w*MAX/h);h=MAX;}}
+        var c=document.createElement("canvas");c.width=w;c.height=h;
+        c.getContext("2d").drawImage(im,0,0,w,h);
+        current.src=c.toDataURL("image/jpeg",0.82);
+        current=null;fi.value="";
+      };
+      im.src=e.target.result;
+    };
+    rd.readAsDataURL(f);
+  });
 })();
 function stahnoutWeb(){
   var clone=document.documentElement.cloneNode(true);
-  ["editor-bar","editor-style","editor-script"].forEach(function(id){var n=clone.querySelector("#"+id);if(n)n.remove();});
+  // odstranit prvky editoru
+  ["editor-bar","editor-style","editor-script","ed-fileinput"].forEach(function(id){var n=clone.querySelector("#"+id);if(n)n.remove();});
+  // rozbalit obrazky z .ed-imgwrap zpet na puvodni strukturu
+  clone.querySelectorAll(".ed-imgwrap").forEach(function(w){
+    var img=w.querySelector("img");var btn=w.querySelector(".ed-imgbtn");if(btn)btn.remove();
+    if(img){w.parentNode.insertBefore(img,w);} w.remove();
+  });
   clone.querySelectorAll("[contenteditable]").forEach(function(e){e.removeAttribute("contenteditable");});
   clone.querySelectorAll('a[href^="tel:"]').forEach(function(a){a.setAttribute("href","tel:+420"+a.textContent.replace(/\D/g,""));});
   clone.querySelectorAll('a[href^="mailto:"]').forEach(function(a){a.setAttribute("href","mailto:"+a.textContent.trim());});
